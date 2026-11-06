@@ -7,11 +7,11 @@ plugins {
 
 android {
     namespace = "uk.lgl"
-    compileSdk = 30
+    compileSdk = 36
 
     defaultConfig {
-        minSdk = 19
-        targetSdk = 30
+        minSdk = 21
+        targetSdk = 36
         versionName = "2.8"
 
         externalNativeBuild {
