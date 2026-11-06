@@ -13,8 +13,8 @@
 
 ## Photo
 
-![](img1.jpg)
-![](img2.jpg)
+![](image1.jpg)
+![](image2.jpg)
 
 ## ⚙️ How to Use in CodeAssist
 1. Download or clone this repository.
