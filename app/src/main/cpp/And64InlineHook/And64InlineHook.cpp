@@ -1,3 +1,4 @@
+#include <jni.h>
 /*
  *  @date   : 2018/04/18
  *  @author : Rprop (r_prop@outlook.com)

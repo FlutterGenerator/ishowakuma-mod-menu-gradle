@@ -20,8 +20,6 @@ public class MainActivity extends Activity {
     System.loadLibrary("IShowAkuma");
   }
 
-  private static final int OVERLAY_REQUEST = 1001;
-
   private static final String GAME_ACTIVITY = "com.unity3d.player.UnityPlayerActivity";
 
   private boolean gameLaunched = false;

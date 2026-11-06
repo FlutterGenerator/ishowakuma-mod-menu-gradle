@@ -69,6 +69,54 @@ Java_uk_lgl_modmenu_FloatingModMenuService_Background(
     return env->NewStringUTF(Background_B64);
 }
 
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_EYE(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(EYE_B64);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_EYECLOSE(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(EYECLOSE_B64);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_IconTele(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(TELE_B64);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_IconTeleVip(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(TELEVIP_B64);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_IconYoutube(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(YOUTUBE_B64);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_uk_lgl_modmenu_FloatingModMenuService_Sonic(
+        JNIEnv *env,
+        jobject thiz) {
+    return env->NewStringUTF(SONIC_B64);
+}
+
 JNIEXPORT jstring JNICALL
 Java_uk_lgl_modmenu_FloatingModMenuService_IconWebViewData(JNIEnv *env, jobject thiz) {
     iconValid = true;
@@ -131,7 +179,6 @@ Java_uk_lgl_modmenu_FloatingModMenuService_settingsList(JNIEnv *env, jobject act
     return (ret);
 }
 }
-
 // ---- Natives declared in FloatingModMenuService.java (were missing => UnsatisfiedLinkError) ----
 #define IMG_NATIVE_B64(NAME, DATA) \
 JNIEXPORT jstring JNICALL Java_uk_lgl_modmenu_FloatingModMenuService_##NAME(JNIEnv *env, jobject thiz) { \
@@ -139,12 +186,3 @@ JNIEXPORT jstring JNICALL Java_uk_lgl_modmenu_FloatingModMenuService_##NAME(JNIE
 #define EMPTY_LIST_NATIVE(NAME) \
 JNIEXPORT jobjectArray JNICALL Java_uk_lgl_modmenu_FloatingModMenuService_##NAME(JNIEnv *env, jobject thiz) { \
     return env->NewObjectArray(0, env->FindClass("java/lang/String"), env->NewStringUTF("")); }
-
-extern "C" {
-IMG_NATIVE_B64(EYE, EYE_B64)
-IMG_NATIVE_B64(EYECLOSE, EYECLOSE_B64)
-IMG_NATIVE_B64(IconTele, TELE_B64)
-IMG_NATIVE_B64(IconTeleVip, TELEVIP_B64)
-IMG_NATIVE_B64(IconYoutube, YOUTUBE_B64)
-IMG_NATIVE_B64(Sonic, SONIC_B64)
-}
