@@ -8,7 +8,8 @@
 * iShowakuma Mod Menu Project.
 
 ## 📂 Project Files
-- `ishowakuma-mod-menu.caproj` — Main project file.
+
+[![Download](https://img.shields.io/badge/Download-CAPROJ-blue)](ishowakuma-mod-menu.caproj)
 
 ## ⚙️ How to Use in CodeAssist
 1. Download or clone this repository.
