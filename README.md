@@ -1,6 +1,6 @@
 # iShowakuma Mod Menu
 
-[![ishowakuma-mod-menu Build](https://github.com/FlutterGenerator/ishowakuma-mod-menu/actions/workflows/build-apk.yml/badge.svg)](https://github.com/FlutterGenerator/ishowakuma-mod-menu/actions/workflows/build-apk.yml)
+[![ishowakuma-mod-menu Build](https://github.com/FlutterGenerator/ishowakuma-mod-menu/actions/workflows/build-apk.yml/badge.svg)](https://github.com/FlutterGenerator/ishowakuma-mod-menu-gradle/actions/workflows/build-apk.yml)
 
 [![License Info](https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=flat-square)](https://github.com/FlutterGenerator/ishowakuma-mod-menu/blob/master/LICENSE)
 
