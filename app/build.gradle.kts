@@ -12,7 +12,7 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 36
-        versionCode 1
+        versionCode = 1
         versionName = "2.8"
 
         externalNativeBuild {
