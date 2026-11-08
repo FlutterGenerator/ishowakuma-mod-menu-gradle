@@ -51,8 +51,13 @@ Memory_Status KittyMemory::memWrite(void *addr, const void *buffer, size_t len) 
     if (!ProtectAddr(addr, len, _PROT_RWX_))
         return INV_PROT;
 
-    if (memcpy(addr, buffer, len) != NULL && ProtectAddr(addr, len, _PROT_RX_))
-        return SUCCESS;
+    if (memcpy(addr, buffer, len) != NULL) {
+        // ARM has separate I/D caches: without this the CPU may keep running the OLD code
+        __builtin___clear_cache(reinterpret_cast<char *>(addr),
+                                reinterpret_cast<char *>(addr) + len);
+        if (ProtectAddr(addr, len, _PROT_RX_))
+            return SUCCESS;
+    }
 
     return FAILED;
 }

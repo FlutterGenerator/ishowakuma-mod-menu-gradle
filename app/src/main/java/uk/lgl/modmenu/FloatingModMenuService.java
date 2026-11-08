@@ -4,6 +4,7 @@ import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.Service;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.*;
@@ -337,7 +338,7 @@ public class FloatingModMenuService extends Service {
     return Html.fromHtml(text);
   }
 
-  /** "Имя -> &lt;font color&gt;значение" */
+  /** "Имя -> <font color>значение" */
   private Spanned coloredValue(String name, String value) {
     return html(name + " -> <font color='" + NumberTxtColor + "'>" + value);
   }
@@ -360,7 +361,12 @@ public class FloatingModMenuService extends Service {
     if (Build.VERSION.SDK_INT >= 19) {
       Objects.requireNonNull(dialog.getWindow()).setType(overlayType());
     }
-    dialog.setOnCancelListener(d -> toggleKeyboard(InputMethodManager.SHOW_IMPLICIT, 0));
+    dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+      @Override
+      public void onCancel(DialogInterface d) {
+        toggleKeyboard(InputMethodManager.SHOW_IMPLICIT, 0);
+      }
+    });
     return dialog;
   }
 
@@ -410,18 +416,40 @@ public class FloatingModMenuService extends Service {
     }
   }
 
+  /** Шрифт из assets; если ассета нет в APK игры - обычный шрифт вместо краша. */
+  private Typeface safeFont(String name) {
+    try {
+      return Typeface.createFromAsset(getAssets(), name);
+    } catch (Throwable t) {
+      Log.w(TAG, "Font not found: " + name);
+      return Typeface.DEFAULT_BOLD;
+    }
+  }
+
   // ───────────── Жизненный цикл ─────────────
 
   @Override
   public void onCreate() {
     super.onCreate();
+
     Preferences.context = this;
+
     initFloating();
 
-    Handler handler = new Handler();
-    handler.postDelayed(() -> {
-      updateVisibility();
-      handler.postDelayed(this::updateVisibility, 1000);
+    final Handler handler = new Handler();
+
+    handler.postDelayed(new Runnable() {
+      @Override
+      public void run() {
+        updateVisibility();
+
+        handler.postDelayed(new Runnable() {
+          @Override
+          public void run() {
+            updateVisibility();
+          }
+        }, 1000);
+      }
     }, 1000);
   }
 
@@ -473,8 +501,8 @@ public class FloatingModMenuService extends Service {
   // ───────────── Построение меню ─────────────
 
   public void initFloating() {
-    Typeface titleFont = Typeface.createFromAsset(getAssets(), "NoName2.ttf");
-    Typeface tabFont = Typeface.createFromAsset(getAssets(), "NoName3.ttf");
+    Typeface titleFont = safeFont("NoName2.ttf");
+    Typeface tabFont = safeFont("NoName3.ttf");
 
     rootFrame = new FrameLayout(this);
     rootFrame.setOnTouchListener(onTouchListener());
@@ -548,27 +576,43 @@ public class FloatingModMenuService extends Service {
     startimage.setImageBitmap(decodeBase64(Icon()));
     ((ViewGroup.MarginLayoutParams) startimage.getLayoutParams()).topMargin = convertDipToPixels(
         10);
-    startimage.setOnTouchListener(onTouchListener());
-    startimage.setOnClickListener(view -> {
-      mCollapsed.setVisibility(View.GONE);
-      mExpanded.setVisibility(View.VISIBLE);
-    });
+	  startimage.setOnTouchListener(onTouchListener());
+
+	  startimage.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  mCollapsed.setVisibility(View.GONE);
+				  mExpanded.setVisibility(View.VISIBLE);
+			  }
+		  });
   }
 
-  private TextView buildTelegramIcon() {
-    TextView icon = new TextView(this);
-    icon.setText(Build.VERSION.SDK_INT >= 23 ? "☹︎" : "☻︎︎");
-    icon.setTextColor(TEXT_COLOR);
-    icon.setTypeface(Typeface.DEFAULT_BOLD);
-    icon.setTextSize(25.0f);
-    icon.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
-    RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
-        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
-    icon.setLayoutParams(lp);
-    icon.setOnClickListener(view -> openUrl("https://t.me/sbgamingytgroup"));
-    return icon;
-  }
+	private TextView buildTelegramIcon() {
+		TextView icon = new TextView(this);
+
+		icon.setText(Build.VERSION.SDK_INT >= 23 ? "☹︎" : "☻︎︎");
+		icon.setTextColor(TEXT_COLOR);
+		icon.setTypeface(Typeface.DEFAULT_BOLD);
+		icon.setTextSize(25.0f);
+		icon.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
+
+		RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT,
+			ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+
+		lp.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+		icon.setLayoutParams(lp);
+
+		icon.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					openUrl("https://t.me/sbgamingytgroup");
+				}
+			});
+
+		return icon;
+	}
 
   private void buildSettingsPanel() {
     settingsScroll = new ScrollView(this);
@@ -628,26 +672,34 @@ public class FloatingModMenuService extends Service {
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     tabParams.setMargins(-2, 5, -2, 5);
 
-    LinearLayout row = new LinearLayout(this);
-    row.setOrientation(LinearLayout.HORIZONTAL);
+	  LinearLayout row = new LinearLayout(this);
+	  row.setOrientation(LinearLayout.HORIZONTAL);
 
-    for (int i = 0; i < TAB_COUNT; i++) {
-      row.addView(createSeparator(separatorParams));
+	  for (int i = 0; i < TAB_COUNT; i++) {
+		  row.addView(createSeparator(separatorParams));
 
-      final int index = i;
-      TextView tab = new TextView(this);
-      tab.setLayoutParams(tabParams);
-      tab.setText(TAB_TITLES[i]);
-      tab.setGravity(Gravity.CENTER);
-      tab.setTextColor(TAB_TEXT_COLOR);
-      tab.setTextSize(TAB_TEXT_SIZE);
-      tab.setPadding(30, 15, 30, 15);
-      tab.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
-      tab.setTypeface(tabFont, Typeface.BOLD);
-      tab.setOnClickListener(view -> selectTab(index));
-      tabs[i] = tab;
-      row.addView(tab);
-    }
+		  final int index = i;
+
+		  TextView tab = new TextView(this);
+		  tab.setLayoutParams(tabParams);
+		  tab.setText(TAB_TITLES[i]);
+		  tab.setGravity(Gravity.CENTER);
+		  tab.setTextColor(TAB_TEXT_COLOR);
+		  tab.setTextSize(TAB_TEXT_SIZE);
+		  tab.setPadding(30, 15, 30, 15);
+		  tab.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
+		  tab.setTypeface(tabFont, Typeface.BOLD);
+
+		  tab.setOnClickListener(new View.OnClickListener() {
+				  @Override
+				  public void onClick(View view) {
+					  selectTab(index);
+				  }
+			  });
+
+		  tabs[i] = tab;
+		  row.addView(tab);
+	  }
     row.addView(createSeparator(separatorParams));
 
     HorizontalScrollView tabsScroll = new HorizontalScrollView(this);
@@ -716,47 +768,79 @@ public class FloatingModMenuService extends Service {
     }
   }
 
-  private RelativeLayout buildBottomButtons() {
-    RelativeLayout row = new RelativeLayout(this);
-    row.setPadding(0, 0, 0, 0);
-    row.setVerticalGravity(Gravity.CENTER);
+	private RelativeLayout buildBottomButtons() {
+		RelativeLayout row = new RelativeLayout(this);
+		row.setPadding(0, 0, 0, 0);
+		row.setVerticalGravity(Gravity.CENTER);
 
-    RelativeLayout.LayoutParams settingsParams = new RelativeLayout.LayoutParams(
-        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    settingsParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-    hideBtn = new Button(this);
-    hideBtn.setLayoutParams(settingsParams);
-    hideBtn.setText("SETTINGS");
-    GradientDrawable settingsBg = new GradientDrawable();
-    settingsBg.setColor(BTN_COLOR);
-    settingsBg.setStroke(3, Color.WHITE);
-    settingsBg.setCornerRadii(new float[] { 0, 0, 30, 30, 0, 0, 0, 0 });
-    hideBtn.setBackground(settingsBg);
-    hideBtn.setTextColor(TEXT_COLOR);
-    hideBtn.setOnClickListener(view -> toggleSettings());
+		// SETTINGS button
+		RelativeLayout.LayoutParams settingsParams =
+			new RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
 
-    RelativeLayout.LayoutParams closeParams = new RelativeLayout.LayoutParams(
-        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    closeParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
-    closeBtn = new Button(this);
-    closeBtn.setLayoutParams(closeParams);
-    GradientDrawable closeBg = new GradientDrawable();
-    closeBg.setColor(BTN_COLOR);
-    closeBg.setStroke(3, Color.WHITE);
-    closeBg.setCornerRadii(new float[] { 30, 30, 0, 0, 0, 0, 0, 0 });
-    closeBtn.setBackground(closeBg);
-    closeBtn.setText("MINIMIZE");
-    closeBtn.setTextColor(TEXT_COLOR);
-    closeBtn.setOnClickListener(view -> {
-      mCollapsed.setVisibility(View.VISIBLE);
-      mCollapsed.setAlpha(ICON_ALPHA);
-      mExpanded.setVisibility(View.GONE);
-    });
+		settingsParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
 
-    row.addView(hideBtn);
-    row.addView(closeBtn);
-    return row;
-  }
+		hideBtn = new Button(this);
+		hideBtn.setLayoutParams(settingsParams);
+		hideBtn.setText("SETTINGS");
+
+		GradientDrawable settingsBg = new GradientDrawable();
+		settingsBg.setColor(BTN_COLOR);
+		settingsBg.setStroke(3, Color.WHITE);
+		settingsBg.setCornerRadii(new float[] {
+									  0, 0, 30, 30, 0, 0, 0, 0
+								  });
+
+		hideBtn.setBackground(settingsBg);
+		hideBtn.setTextColor(TEXT_COLOR);
+
+		hideBtn.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					toggleSettings();
+				}
+			});
+
+		// MINIMIZE button
+		RelativeLayout.LayoutParams closeParams =
+			new RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+
+		closeParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+
+		closeBtn = new Button(this);
+		closeBtn.setLayoutParams(closeParams);
+
+		GradientDrawable closeBg = new GradientDrawable();
+		closeBg.setColor(BTN_COLOR);
+		closeBg.setStroke(3, Color.WHITE);
+		closeBg.setCornerRadii(new float[] {
+								   30, 30, 0, 0, 0, 0, 0, 0
+							   });
+
+		closeBtn.setBackground(closeBg);
+		closeBtn.setText("MINIMIZE");
+		closeBtn.setTextColor(TEXT_COLOR);
+
+		closeBtn.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					mCollapsed.setVisibility(View.VISIBLE);
+					mCollapsed.setAlpha(ICON_ALPHA);
+					mExpanded.setVisibility(View.GONE);
+				}
+			});
+
+		// Add buttons to layout
+		row.addView(hideBtn);
+		row.addView(closeBtn);
+
+		return row;
+	}
 
   private void toggleSettings() {
     settingsOpen = !settingsOpen;
@@ -915,7 +999,7 @@ public class FloatingModMenuService extends Service {
 
   // ───────────── Color Picker ─────────────
 
-  public View ColorPicker(int featNum, String name, int a, int r, int g, int b) {
+  public View ColorPicker(int featNum, final String name, int a, int r, int g, int b) {
     LinearLayout root = new LinearLayout(this);
     LinearLayout.LayoutParams rootParams = new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -952,11 +1036,11 @@ public class FloatingModMenuService extends Service {
     previewRow.setPadding(20, 5, 0, 5);
     previewRow.setGravity(Gravity.CENTER_VERTICAL);
 
-    View colorView = new View(this);
+    final View colorView = new View(this);
     colorView.setLayoutParams(new LinearLayout.LayoutParams(dp(20), dp(20)));
     colorView.setBackgroundColor(Color.argb(a, r, g, b));
 
-    TextView colorText = new TextView(this);
+    final TextView colorText = new TextView(this);
     colorText.setText(toHex(a, r, g, b));
     colorText.setTextColor(Color.WHITE);
     colorText.setTextSize(14.0f);
@@ -972,23 +1056,33 @@ public class FloatingModMenuService extends Service {
     pickButton.setBackground(pickBg);
     pickButton.setTextColor(Color.WHITE);
 
-    int[] initialProgress = { a, r, g, b };
-    pickButton.setOnClickListener(
-        view -> showColorPickerDialog(name, initialProgress, colorView, colorText));
+	  final int[] initialProgress = { a, r, g, b };
 
-    root.addView(left);
-    left.addView(column);
-    column.addView(title);
-    column.addView(previewRow);
-    previewRow.addView(colorView);
-    previewRow.addView(colorText);
-    root.addView(pickButton);
-    return root;
+	  pickButton.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  showColorPickerDialog(
+					  name,
+					  initialProgress,
+					  colorView,
+					  colorText
+				  );
+			  }
+		  });
+
+	  root.addView(left);
+	  left.addView(column);
+	  column.addView(title);
+	  column.addView(previewRow);
+	  previewRow.addView(colorView);
+	  previewRow.addView(colorText);
+	  root.addView(pickButton);
+
+	  return root;
   }
-
-  private void showColorPickerDialog(String featName, int[] initialProgress, View colorView,
-      TextView colorText) {
-    AlertDialog dialog = createOverlayDialog();
+  private void showColorPickerDialog(String featName, final int[] initialProgress, final View colorView,
+      final TextView colorText) {
+    final AlertDialog dialog = createOverlayDialog();
 
     LinearLayout content = new LinearLayout(getApplicationContext());
     content.setPadding(5, 5, 5, 5);
@@ -1012,12 +1106,12 @@ public class FloatingModMenuService extends Service {
     previewRow.setPadding(15, 10, 15, 10);
     previewRow.setOrientation(LinearLayout.HORIZONTAL);
 
-    View previewColor = new View(getApplicationContext());
+    final View previewColor = new View(getApplicationContext());
     previewColor.setLayoutParams(new LinearLayout.LayoutParams(dp(20), dp(20)));
     previewColor.setBackgroundColor(
         Color.argb(initialProgress[0], initialProgress[1], initialProgress[2], initialProgress[3]));
 
-    TextView previewText = new TextView(getApplicationContext());
+    final TextView previewText = new TextView(getApplicationContext());
     previewText.setText(
         toHex(initialProgress[0], initialProgress[1], initialProgress[2], initialProgress[3]));
     previewText.setTextColor(Color.WHITE);
@@ -1030,9 +1124,9 @@ public class FloatingModMenuService extends Service {
     seekBarsLayout.setPadding(10, 0, 0, 0);
     seekBarsLayout.setOrientation(LinearLayout.VERTICAL);
 
-    String[] labels = { "Transparency", "Red", "Green", "Blue" };
+    final String[] labels = { "Transparency", "Red", "Green", "Blue" };
     int[] channelColors = { Color.WHITE, Color.RED, Color.GREEN, Color.BLUE };
-    SeekBar[] seekBars = new SeekBar[4];
+    final SeekBar[] seekBars = new SeekBar[4];
 
     for (int i = 0; i < 4; i++) {
       final int channel = i;
@@ -1041,74 +1135,125 @@ public class FloatingModMenuService extends Service {
       seekRow.setOrientation(LinearLayout.VERTICAL);
       seekRow.setGravity(Gravity.CENTER);
 
-      TextView label = new TextView(getApplicationContext());
+      final TextView label = new TextView(getApplicationContext());
       label.setText(labels[i] + " (" + initialProgress[i] + ") ");
       label.setTextColor(channelColors[i]);
       label.setGravity(Gravity.START);
       label.setPadding(10, 0, 0, 0);
 
-      SeekBar seekBar = new SeekBar(getApplicationContext());
-      seekBar.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-          ViewGroup.LayoutParams.WRAP_CONTENT));
-      seekBar.setMax(255);
-      seekBar.setProgress(initialProgress[i]);
-      seekBar.getProgressDrawable()
-          .setColorFilter(new PorterDuffColorFilter(channelColors[i], PorterDuff.Mode.MULTIPLY));
-      seekBar.getThumb().setColorFilter(channelColors[i], PorterDuff.Mode.SRC_IN);
-      seekBar.setOnSeekBarChangeListener(new ProgressListener((bar, progress) -> {
-        int pa = seekBars[0].getProgress();
-        int pr = seekBars[1].getProgress();
-        int pg = seekBars[2].getProgress();
-        int pb = seekBars[3].getProgress();
-        previewColor.setBackgroundColor(Color.argb(pa, pr, pg, pb));
-        previewText.setText(toHex(pa, pr, pg, pb));
-        label.setText(labels[channel] + " (" + progress + ") ");
-      }));
+		SeekBar seekBar = new SeekBar(getApplicationContext());
 
-      seekRow.addView(label);
-      seekRow.addView(seekBar);
-      seekBarsLayout.addView(seekRow);
-      seekBars[i] = seekBar;
-    }
+		seekBar.setLayoutParams(
+			new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			)
+		);
 
-    LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    buttonParams.setMargins(20, 10, 20, 15);
-    Button setButton = new Button(getApplicationContext());
-    setButton.setLayoutParams(buttonParams);
-    GradientDrawable setBg = new GradientDrawable();
-    setBg.setColor(Color.argb(40, 0, 0, 0));
-    setBg.setCornerRadii(new float[] { 60, 60, 0, 0, 60, 60, 0, 0 });
-    setBg.setStroke(3, Color.WHITE, 0, 0);
-    setButton.setBackground(setBg);
-    setButton.setTextColor(Color.WHITE);
-    setButton.setPadding(15, 10, 15, 10);
-    setButton.setText("SET VALUE");
-    setButton.setOnClickListener(view -> {
-      int pa = seekBars[0].getProgress();
-      int pr = seekBars[1].getProgress();
-      int pg = seekBars[2].getProgress();
-      int pb = seekBars[3].getProgress();
-      for (int i = 0; i < 4; i++) {
-        initialProgress[i] = seekBars[i].getProgress();
-      }
-      int argb = Color.argb(pa, pr, pg, pb);
-      colorView.setBackgroundColor(argb);
-      colorText.setText(toHex(pa, pr, pg, pb));
-      dialog.dismiss();
-      applyMenuColor(argb);
-    });
+		seekBar.setMax(255);
+		seekBar.setProgress(initialProgress[i]);
 
-    content.addView(title);
-    content.addView(previewRow);
-    previewRow.addView(previewColor);
-    previewRow.addView(previewText);
-    content.addView(seekBarsLayout);
-    content.addView(setButton);
-    dialog.setView(content);
-    dialog.show();
-  }
+		seekBar.getProgressDrawable().setColorFilter(
+			new PorterDuffColorFilter(channelColors[i], PorterDuff.Mode.MULTIPLY)
+		);
 
+		seekBar.getThumb().setColorFilter(
+			channelColors[i],
+			PorterDuff.Mode.SRC_IN
+		);
+
+		seekBar.setOnSeekBarChangeListener(
+			new ProgressListener(new ProgressCallback() {
+					@Override
+					public void onChanged(SeekBar bar, int progress) {
+						int pa = seekBars[0].getProgress();
+						int pr = seekBars[1].getProgress();
+						int pg = seekBars[2].getProgress();
+						int pb = seekBars[3].getProgress();
+
+						previewColor.setBackgroundColor(
+							Color.argb(pa, pr, pg, pb)
+						);
+
+						previewText.setText(
+							toHex(pa, pr, pg, pb)
+						);
+
+						label.setText(
+							labels[channel] + " (" + progress + ") "
+						);
+					}
+				})
+		);
+
+		seekRow.addView(label);
+		seekRow.addView(seekBar);
+		seekBarsLayout.addView(seekRow);
+
+		seekBars[i] = seekBar;
+		}
+		
+		LinearLayout.LayoutParams buttonParams =
+			new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+
+		buttonParams.setMargins(20, 10, 20, 15);
+
+		Button setButton = new Button(getApplicationContext());
+		setButton.setLayoutParams(buttonParams);
+
+		GradientDrawable setBg = new GradientDrawable();
+		setBg.setColor(Color.argb(40, 0, 0, 0));
+		setBg.setCornerRadii(new float[] {
+								 60, 60, 0, 0, 60, 60, 0, 0
+							 });
+		setBg.setStroke(3, Color.WHITE, 0, 0);
+
+		setButton.setBackground(setBg);
+		setButton.setTextColor(Color.WHITE);
+		setButton.setPadding(15, 10, 15, 10);
+		setButton.setText("SET VALUE");
+
+		setButton.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+
+					for (int i = 0; i < 4; i++) {
+						initialProgress[i] = seekBars[i].getProgress();
+					}
+
+					int pa = initialProgress[0];
+					int pr = initialProgress[1];
+					int pg = initialProgress[2];
+					int pb = initialProgress[3];
+
+					int argb = Color.argb(pa, pr, pg, pb);
+
+					colorView.setBackgroundColor(argb);
+					colorText.setText(toHex(pa, pr, pg, pb));
+
+					dialog.dismiss();
+
+					applyMenuColor(argb);
+				}
+			});
+
+		content.addView(title);
+		content.addView(previewRow);
+
+		previewRow.addView(previewColor);
+		previewRow.addView(previewText);
+
+		content.addView(seekBarsLayout);
+		content.addView(setButton);
+
+		dialog.setView(content);
+		dialog.show();
+		}
+		
+		
   private void applyMenuColor(int argb) {
     mExpanded.setBackgroundColor(argb);
 
@@ -1127,35 +1272,47 @@ public class FloatingModMenuService extends Service {
 
   // ───────────── Switch ─────────────
 
-  public View Switch(int featNum, String name, boolean defaultValue) {
-    Switch switchView = new Switch(this);
+	public View Switch(final int featNum, final String name, boolean defaultValue) {
+		final Switch switchView = new Switch(this);
 
-    GradientDrawable track = new GradientDrawable();
-    track.setSize(20, 20);
-    track.setCornerRadius(100);
+		final GradientDrawable track = new GradientDrawable();
+		track.setSize(20, 20);
+		track.setCornerRadius(100);
 
-    GradientDrawable thumb = new GradientDrawable();
-    thumb.setSize(40, 40);
-    thumb.setShape(GradientDrawable.OVAL);
+		final GradientDrawable thumb = new GradientDrawable();
+		thumb.setSize(40, 40);
+		thumb.setShape(GradientDrawable.OVAL);
 
-    boolean checked = Preferences.loadPrefBool(name, featNum, defaultValue);
-    applySwitchStyle(track, thumb, checked);
+		boolean checked = Preferences.loadPrefBool(name, featNum, defaultValue);
 
-    switchView.setText(name);
-    switchView.setTextColor(TEXT_COLOR_2);
-    switchView.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
-    switchView.setPadding(10, 5, 10, 5);
-    switchView.setThumbDrawable(thumb);
-    switchView.setTrackDrawable(track);
-    switchView.setChecked(checked);
-    switchView.setOnCheckedChangeListener((button, isChecked) -> {
-      Preferences.changeFeatureBool(name, featNum, isChecked);
-      applySwitchStyle(track, thumb, isChecked);
-      handleSpecialSwitch(featNum, isChecked, switchView);
-    });
-    return switchView;
-  }
+		applySwitchStyle(track, thumb, checked);
 
+		switchView.setText(name);
+		switchView.setTextColor(TEXT_COLOR_2);
+		switchView.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
+		switchView.setPadding(10, 5, 10, 5);
+		switchView.setThumbDrawable(thumb);
+		switchView.setTrackDrawable(track);
+		switchView.setChecked(checked);
+
+		switchView.setOnCheckedChangeListener(
+			new CompoundButton.OnCheckedChangeListener() {
+				@Override
+				public void onCheckedChanged(
+					CompoundButton button,
+					boolean isChecked
+				) {
+					Preferences.changeFeatureBool(name, featNum, isChecked);
+
+					applySwitchStyle(track, thumb, isChecked);
+
+					handleSpecialSwitch(featNum, isChecked, switchView);
+				}
+			}
+		);
+
+		return switchView;
+	}
   private void applySwitchStyle(GradientDrawable track, GradientDrawable thumb, boolean on) {
     if (on) {
       track.setStroke(2, Color.WHITE);
@@ -1213,48 +1370,71 @@ public class FloatingModMenuService extends Service {
 
   // ───────────── SeekBar ─────────────
 
-  public View SeekBar(int featNum, String name, int min, int max) {
-    int saved = Preferences.loadPrefInt(name, featNum);
+	public View SeekBar(final int featNum, final String name, final int min, final int max) {
+		int saved = Preferences.loadPrefInt(name, featNum);
 
-    LinearLayout layout = new LinearLayout(this);
-    layout.setPadding(10, 5, 0, 5);
-    layout.setOrientation(LinearLayout.VERTICAL);
-    layout.setGravity(Gravity.CENTER);
+		LinearLayout layout = new LinearLayout(this);
+		layout.setPadding(10, 5, 0, 5);
+		layout.setOrientation(LinearLayout.VERTICAL);
+		layout.setGravity(Gravity.CENTER);
 
-    TextView label = new TextView(this);
-    if (Preferences.loadPref) {
-      label.setText(coloredValue(name, saved + " (SAVED VALUE)"));
-    } else {
-      label.setText(coloredValue(name, " [DEFAULT]"));
-    }
-    label.setTextColor(TEXT_COLOR_2);
-    label.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
-    label.setTextSize(13.0f);
+		final TextView label = new TextView(this);
 
-    SeekBar seekBar = new SeekBar(this);
-    seekBar.setPadding(25, 10, 35, 10);
-    seekBar.setMax(max);
-    if (Build.VERSION.SDK_INT >= 26) {
-      seekBar.setMin(min);
-    }
-    seekBar.setProgress(saved == 0 ? min : saved);
+		if (Preferences.loadPref) {
+			label.setText(coloredValue(name, saved + " (SAVED VALUE)"));
+		} else {
+			label.setText(coloredValue(name, " [DEFAULT]"));
+		}
 
-    GradientDrawable thumb = new GradientDrawable();
-    thumb.setShape(GradientDrawable.OVAL);
-    thumb.setColor(SeekBarColor);
-    thumb.setStroke(dp(2), Color.WHITE);
-    thumb.setCornerRadius(15.0f);
-    thumb.setSize(dp(18), dp(18));
-    seekBar.setThumb(thumb);
-    seekBar.getProgressDrawable().setColorFilter(SeekBarProgressColor, PorterDuff.Mode.SRC_ATOP);
+		label.setTextColor(TEXT_COLOR_2);
+		label.setShadowLayer(7.0f, 0.0f, 0.0f, Color.BLACK);
+		label.setTextSize(13.0f);
 
-    seekBar.setOnSeekBarChangeListener(new ProgressListener(
-        (bar, progress) -> onSeekBarChanged(bar, progress, name, featNum, min, label)));
+		SeekBar seekBar = new SeekBar(this);
+		seekBar.setPadding(25, 10, 35, 10);
+		seekBar.setMax(max);
 
-    layout.addView(label);
-    layout.addView(seekBar);
-    return layout;
-  }
+		if (Build.VERSION.SDK_INT >= 26) {
+			seekBar.setMin(min);
+		}
+
+		seekBar.setProgress(saved == 0 ? min : saved);
+
+		GradientDrawable thumb = new GradientDrawable();
+		thumb.setShape(GradientDrawable.OVAL);
+		thumb.setColor(SeekBarColor);
+		thumb.setStroke(dp(2), Color.WHITE);
+		thumb.setCornerRadius(15.0f);
+		thumb.setSize(dp(18), dp(18));
+
+		seekBar.setThumb(thumb);
+
+		seekBar.getProgressDrawable().setColorFilter(
+			SeekBarProgressColor,
+			PorterDuff.Mode.SRC_ATOP
+		);
+
+		seekBar.setOnSeekBarChangeListener(
+			new ProgressListener(new ProgressCallback() {
+					@Override
+					public void onChanged(SeekBar bar, int progress) {
+						onSeekBarChanged(
+							bar,
+							progress,
+							name,
+							featNum,
+							min,
+							label
+						);
+					}
+				})
+		);
+
+		layout.addView(label);
+		layout.addView(seekBar);
+
+		return layout;
+	}
 
   private void onSeekBarChanged(SeekBar seekBar, int progress, String name, int featNum, int min,
       TextView label) {
@@ -1319,108 +1499,172 @@ public class FloatingModMenuService extends Service {
 
   // ───────────── Кнопки ─────────────
 
-  public void HorizontalButton(LinearLayout parent, int featNum, String name) {
-    LinearLayout row = new LinearLayout(this);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-    lp.setMargins(5, 7, 5, 7);
-    row.setOrientation(LinearLayout.HORIZONTAL);
-    row.setLayoutParams(lp);
+	public void HorizontalButton(final LinearLayout parent, final int featNum, final String name) {
+		LinearLayout row = new LinearLayout(this);
 
-    Button button = new Button(this);
-    AddColor(button, Color.parseColor("#AFFF3434"), 3, 0, 0, LST_MAB, 30, 30, 0, 0, 30, 30, 0, 0);
-    button.setTextColor(TEXT_COLOR_2);
-    button.setText(html(name));
-    button.setOnClickListener(view -> {
-      switch (featNum) {
-        case -561:
-          Logcat.Clear(getApplicationContext());
-          break;
-        case -452:
-          Logcat.Save(getApplicationContext());
-          break;
-        default:
-          break;
-      }
-      Preferences.changeFeatureInt(name, featNum, 0);
-    });
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		);
 
-    row.addView(button);
-    parent.addView(row);
-  }
+		lp.setMargins(5, 7, 5, 7);
 
-  public View Button(int featNum, String name) {
-    Button button = new Button(this);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setLayoutParams(lp);
+
+		Button button = new Button(this);
+
+		AddColor(
+			button,
+			Color.parseColor("#AFFF3434"),
+			3, 0, 0, LST_MAB,
+			30, 30, 0, 0, 30, 30, 0, 0
+		);
+
+		button.setTextColor(TEXT_COLOR_2);
+		button.setText(html(name));
+
+		button.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+
+					switch (featNum) {
+						case -561:
+							Logcat.Clear(getApplicationContext());
+							break;
+
+						case -452:
+							Logcat.Save(getApplicationContext());
+							break;
+
+						default:
+							break;
+					}
+
+					Preferences.changeFeatureInt(name, featNum, 0);
+				}
+			});
+
+		row.addView(button);
+		parent.addView(row);
+	}
+
+	public View Button(final int featNum, final String name) {
+		Button button = new Button(this);
+
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		);
+
+		lp.setMargins(7, 5, 7, 5);
+
+		button.setLayoutParams(lp);
+		button.setTextColor(TEXT_COLOR_2);
+		button.setAllCaps(false);
+		button.setText(html(name));
+		button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
+
+		button.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+
+					switch (featNum) {
+						case -100:
+							stopChecking = true;
+							break;
+
+						case -12:
+							stopSelf();
+							break;
+
+						case -11:
+							mCollapsed.setVisibility(View.VISIBLE);
+							mCollapsed.setAlpha(0);
+							mExpanded.setVisibility(View.GONE);
+							break;
+
+						case -5:
+							Logcat.Clear(getApplicationContext());
+							break;
+
+						case -4:
+							Logcat.Save(getApplicationContext());
+							break;
+
+						default:
+							break;
+					}
+
+					Preferences.changeFeatureInt(name, featNum, 0);
+				}
+			});
+
+		return button;
+	}
+
+	public View ButtonLink(final String name, final String url) {
+		Button button = new Button(this);
+
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		);
+
+		lp.setMargins(7, 5, 7, 5);
+
+		button.setLayoutParams(lp);
+		button.setAllCaps(false);
+		button.setTextColor(TEXT_COLOR_2);
+		button.setText(html(name));
+		button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
+
+		button.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					openUrl(url);
+				}
+			});
+
+		return button;
+	}
+
+  public View ButtonOnOff(final int featNum, String name, boolean defaultValue) {
+    final Button button = new Button(this);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
     lp.setMargins(7, 5, 7, 5);
     button.setLayoutParams(lp);
     button.setTextColor(TEXT_COLOR_2);
     button.setAllCaps(false);
-    button.setText(html(name));
-    button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
-    button.setOnClickListener(view -> {
-      switch (featNum) {
-        case -100:
-          stopChecking = true;
-          break;
-        case -12:
-          stopSelf();
-          break;
-        case -11:
-          mCollapsed.setVisibility(View.VISIBLE);
-          mCollapsed.setAlpha(0);
-          mExpanded.setVisibility(View.GONE);
-          break;
-        case -5:
-          Logcat.Clear(getApplicationContext());
-          break;
-        case -4:
-          Logcat.Save(getApplicationContext());
-          break;
-        default:
-          break;
-      }
-      Preferences.changeFeatureInt(name, featNum, 0);
-    });
-    return button;
-  }
 
-  public View ButtonLink(String name, String url) {
-    Button button = new Button(this);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-    lp.setMargins(7, 5, 7, 5);
-    button.setLayoutParams(lp);
-    button.setAllCaps(false);
-    button.setTextColor(TEXT_COLOR_2);
-    button.setText(html(name));
-    button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
-    button.setOnClickListener(view -> openUrl(url));
-    return button;
-  }
-
-  public View ButtonOnOff(int featNum, String name, boolean defaultValue) {
-    Button button = new Button(this);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-    lp.setMargins(7, 5, 7, 5);
-    button.setLayoutParams(lp);
-    button.setTextColor(TEXT_COLOR_2);
-    button.setAllCaps(false);
-
-    String displayName = name.replace("OnOff_", "");
+    final String displayName = name.replace("OnOff_", "");
     boolean currentlyOn = Preferences.loadPrefBool(name, featNum, defaultValue);
     applyOnOffStyle(button, displayName, currentlyOn);
 
-    boolean[] nextState = { !currentlyOn };
-    button.setOnClickListener(view -> {
-      Preferences.changeFeatureBool(displayName, featNum, nextState[0]);
-      applyOnOffStyle(button, displayName, nextState[0]);
-      nextState[0] = !nextState[0];
-    });
-    return button;
-  }
+	  final boolean[] nextState = { !currentlyOn };
+
+	  button.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  Preferences.changeFeatureBool(
+					  displayName,
+					  featNum,
+					  nextState[0]
+				  );
+
+				  applyOnOffStyle(
+					  button,
+					  displayName,
+					  nextState[0]
+				  );
+
+				  nextState[0] = !nextState[0];
+			  }
+		  });
+
+	  return button;
+	  }
 
   private void applyOnOffStyle(Button button, String name, boolean on) {
     button.setText(html(name + (on ? ": ON" : ": OFF")));
@@ -1433,90 +1677,141 @@ public class FloatingModMenuService extends Service {
 
   // ───────────── Offset finder ─────────────
 
-  public View OffsetMethod(int featNum, String name) {
-    Button button = new Button(this);
-    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-    lp.setMargins(7, 5, 7, 5);
-    button.setLayoutParams(lp);
-    button.setTextColor(TEXT_COLOR_2);
-    button.setAllCaps(false);
-    button.setText(html(name));
-    button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
+	public View OffsetMethod(int featNum, String name) {
+		Button button = new Button(this);
 
-    AlertDialog dialog = new AlertDialog.Builder(this).create();
-    if (Build.VERSION.SDK_INT >= 19) {
-      Objects.requireNonNull(dialog.getWindow()).setType(overlayType());
-    }
-    dialog.setOnCancelListener(d -> toggleKeyboard(InputMethodManager.SHOW_IMPLICIT, 0));
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		);
 
-    LinearLayout content = new LinearLayout(this);
-    content.setPadding(5, 5, 5, 5);
-    content.setOrientation(LinearLayout.VERTICAL);
-    content.setBackground(drawableFromBase64(Sonic()));
+		lp.setMargins(7, 5, 7, 5);
+		button.setLayoutParams(lp);
+		button.setTextColor(TEXT_COLOR_2);
+		button.setAllCaps(false);
+		button.setText(html(name));
+		button.setBackground(roundedButtonBackground(BTN_COLOR, 3));
 
-    TextView title = new TextView(this);
-    title.setText(html("<u>" + name + "</u>"));
-    title.setGravity(Gravity.CENTER);
-    title.setTypeface(Typeface.DEFAULT_BOLD);
-    title.setTextColor(TEXT_COLOR);
-    title.setTextSize(22.0f);
+		final AlertDialog dialog = new AlertDialog.Builder(this).create();
 
-    TextView hint = new TextView(this);
-    hint.setGravity(Gravity.CENTER);
-    hint.setTextSize(14.0f);
-    hint.setText("Click \"Set Value\" button to apply changes || outside to cancel");
-    hint.setPadding(10, 5, 10, 5);
-    hint.setTextColor(TEXT_COLOR);
+		if (Build.VERSION.SDK_INT >= 19) {
+			Objects.requireNonNull(dialog.getWindow()).setType(overlayType());
+		}
 
-    LinearLayout results = new LinearLayout(this);
-    results.setOrientation(LinearLayout.VERTICAL);
-    String[] methods = { "get_transform", "get_position_Injected", "WorldToScreenPoint_Injected",
-        "get_main", "SetResolution", "set_position_Injected" };
-    for (Map.Entry<String, String> entry : searchMethods(methods).entrySet()) {
-      TextView line = new TextView(this);
-      line.setText(entry.getKey() + ": " + entry.getValue());
-      line.setTextColor(TEXT_COLOR);
-      results.addView(line);
-    }
+		dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+				@Override
+				public void onCancel(DialogInterface d) {
+					toggleKeyboard(InputMethodManager.SHOW_IMPLICIT, 0);
+				}
+			});
 
-    content.addView(title);
-    content.addView(hint);
-    content.addView(results);
-    dialog.setView(content);
+		LinearLayout content = new LinearLayout(this);
+		content.setPadding(5, 5, 5, 5);
+		content.setOrientation(LinearLayout.VERTICAL);
+		content.setBackground(drawableFromBase64(Sonic()));
 
-    button.setOnClickListener(view -> dialog.show());
+		TextView title = new TextView(this);
+		title.setText(html("<u>" + name + "</u>"));
+		title.setGravity(Gravity.CENTER);
+		title.setTypeface(Typeface.DEFAULT_BOLD);
+		title.setTextColor(TEXT_COLOR);
+		title.setTextSize(22.0f);
 
-    WindowManager.LayoutParams windowParams = new WindowManager.LayoutParams();
-    windowParams.copyFrom(dialog.getWindow().getAttributes());
-    windowParams.height = 1000;
-    dialog.getWindow().setAttributes(windowParams);
-    return button;
-  }
+		TextView hint = new TextView(this);
+		hint.setGravity(Gravity.CENTER);
+		hint.setTextSize(14.0f);
+		hint.setText("Click \"Set Value\" button to apply changes || outside to cancel");
+		hint.setPadding(10, 5, 10, 5);
+		hint.setTextColor(TEXT_COLOR);
 
-  public static Map<String, String> searchMethods(String[] names) {
-    Map<String, String> found = new HashMap<>();
-    try (FileInputStream fileStream = new FileInputStream("/storage/emulated/0/MT2/libil2cpp.so");
-        DataInputStream dataStream = new DataInputStream(fileStream)) {
-      byte[] buffer = new byte[1024];
-      int read;
-      while ((read = dataStream.read(buffer)) != -1) {
-        String chunk = new String(buffer, 0, read);
-        for (String name : names) {
-          int index = chunk.indexOf(name);
-          if (index != -1) {
-            found.put(name, chunk.substring(index + name.length(), index + name.length() + 8));
-          }
-        }
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-    if (found.isEmpty()) {
-      found.put("Method and offset not found", "0x0");
-    }
-    return found;
-  }
+		LinearLayout results = new LinearLayout(this);
+		results.setOrientation(LinearLayout.VERTICAL);
+
+		String[] methods = {
+			"get_transform",
+			"get_position_Injected",
+			"WorldToScreenPoint_Injected",
+			"get_main",
+			"SetResolution",
+			"set_position_Injected"
+		};
+
+		for (Map.Entry<String, String> entry : searchMethods(methods).entrySet()) {
+			TextView line = new TextView(this);
+			line.setText(entry.getKey() + ": " + entry.getValue());
+			line.setTextColor(TEXT_COLOR);
+			results.addView(line);
+		}
+
+		content.addView(title);
+		content.addView(hint);
+		content.addView(results);
+
+		dialog.setView(content);
+
+		button.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					dialog.show();
+				}
+			});
+
+		WindowManager.LayoutParams windowParams = new WindowManager.LayoutParams();
+		windowParams.copyFrom(dialog.getWindow().getAttributes());
+		windowParams.height = 1000;
+		dialog.getWindow().setAttributes(windowParams);
+
+		return button;
+	}
+
+	public static Map<String, String> searchMethods(String[] names) {
+		Map<String, String> found = new HashMap<String, String>();
+
+		try {
+			FileInputStream fileStream = new FileInputStream(
+				"/storage/emulated/0/MT2/libil2cpp.so"
+			);
+
+			DataInputStream dataStream = new DataInputStream(fileStream);
+
+			try {
+				byte[] buffer = new byte[1024];
+				int read;
+
+				while ((read = dataStream.read(buffer)) != -1) {
+					String chunk = new String(buffer, 0, read);
+
+					for (String name : names) {
+						int index = chunk.indexOf(name);
+
+						if (index != -1) {
+							int end = index + name.length() + 8;
+
+							if (end <= chunk.length()) {
+								found.put(
+									name,
+									chunk.substring(index + name.length(), end)
+								);
+							}
+						}
+					}
+				}
+			} finally {
+				dataStream.close();
+			}
+
+		} catch (IOException e) {
+			// Файл недоступен или произошла ошибка чтения.
+		} catch (SecurityException e) {
+			// Нет разрешения на чтение файла.
+		}
+
+		if (found.isEmpty()) {
+			found.put("Method and offset not found", "0x0");
+		}
+
+		return found;
+	}
 
   // ───────────── Spinner ─────────────
 
@@ -1539,7 +1834,7 @@ public class FloatingModMenuService extends Service {
     Spinner spinner = new Spinner(this, Spinner.MODE_DROPDOWN);
     spinner.setLayoutParams(lp);
     spinner.getBackground().setColorFilter(1, PorterDuff.Mode.SRC_ATOP);
-    ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+    ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
         android.R.layout.simple_spinner_dropdown_item, items);
     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
     spinner.setAdapter(adapter);
@@ -1553,30 +1848,42 @@ public class FloatingModMenuService extends Service {
   // ───────────── Ввод значений ─────────────
 
   /** Иконка-глаз, которая скрывает/показывает значение. */
-  private TextView createEyeToggle(TextView valueText) {
+  private TextView createEyeToggle(final TextView valueText) {
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(30), dp(30));
     lp.gravity = Gravity.BOTTOM;
     lp.setMargins(0, 0, 20, 0);
 
-    BitmapDrawable eyeOpen = drawableFromBase64(EYE());
-    BitmapDrawable eyeClosed = drawableFromBase64(EYECLOSE());
+    final BitmapDrawable eyeOpen = drawableFromBase64(EYE());
+    final BitmapDrawable eyeClosed = drawableFromBase64(EYECLOSE());
 
-    TextView eye = new TextView(this);
+    final TextView eye = new TextView(this);
     eye.setLayoutParams(lp);
     eye.setBackground(eyeOpen);
 
-    boolean[] hidden = { false };
-    eye.setOnClickListener(view -> {
-      hidden[0] = !hidden[0];
-      if (hidden[0]) {
-        eye.setBackground(eyeClosed);
-        valueText.setTransformationMethod(PasswordTransformationMethod.getInstance());
-      } else {
-        eye.setBackground(eyeOpen);
-        valueText.setTransformationMethod(HideReturnsTransformationMethod.getInstance());
-      }
-    });
-    return eye;
+	  final boolean[] hidden = { false };
+
+	  eye.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  hidden[0] = !hidden[0];
+
+				  if (hidden[0]) {
+					  eye.setBackground(eyeClosed);
+
+					  valueText.setTransformationMethod(
+						  PasswordTransformationMethod.getInstance()
+					  );
+				  } else {
+					  eye.setBackground(eyeOpen);
+
+					  valueText.setTransformationMethod(
+						  HideReturnsTransformationMethod.getInstance()
+					  );
+				  }
+			  }
+		  });
+
+	  return eye;
   }
 
   private LinearLayout createInputRow() {
@@ -1620,8 +1927,8 @@ public class FloatingModMenuService extends Service {
     return button;
   }
 
-  public void InputNum(LinearLayout parent, int featNum, String name, int maxValue) {
-    EditTextNum holder = new EditTextNum();
+  public void InputNum(LinearLayout parent, final int featNum, final String name, final int maxValue) {
+    final EditTextNum holder = new EditTextNum();
 
     LinearLayout row = createInputRow();
     LinearLayout column = createInputTextColumn();
@@ -1635,7 +1942,7 @@ public class FloatingModMenuService extends Service {
     title.setPadding(5, 0, 0, 0);
 
     int saved = Preferences.loadPrefInt(name, featNum);
-    TextView valueText = new TextView(this);
+    final TextView valueText = new TextView(this);
     valueText.setText(
         html("═▶︎<font color='" + NumberTxtColor + "'>" + (saved == 0 ? 1 : saved) + "</font>"));
     valueText.setTextColor(TEXT_COLOR_2);
@@ -1645,32 +1952,53 @@ public class FloatingModMenuService extends Service {
 
     TextView eye = createEyeToggle(valueText);
 
-    Button enter = createEnterButton();
-    enter.setOnClickListener(view -> showInputDialog(name, true, null, text -> {
-      int value;
-      try {
-        value = Integer.parseInt(TextUtils.isEmpty(text) ? "0" : text);
-        if (maxValue != 0 && value >= maxValue) {
-          value = maxValue;
-        }
-      } catch (NumberFormatException e) {
-        value = 2147483640;
-      }
-      holder.setNum(value);
-      valueText.setText(html("═▶︎ <font color='" + NumberTxtColor + "'>" + value + "</font>"));
-      Preferences.changeFeatureInt(name, featNum, value);
-    }));
+	  Button enter = createEnterButton();
 
-    row.addView(column);
-    column.addView(title);
-    column.addView(valueText);
-    row.addView(eye);
-    row.addView(enter);
-    parent.addView(row);
+	  enter.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  showInputDialog(name, true, null, new InputCallback() {
+
+						  @Override
+						  public void onConfirm(String text) {
+							  int value;
+
+							  try {
+								  value = Integer.parseInt(
+									  TextUtils.isEmpty(text) ? "0" : text
+								  );
+
+								  if (maxValue != 0 && value >= maxValue) {
+									  value = maxValue;
+								  }
+
+							  } catch (NumberFormatException e) {
+								  value = 2147483640;
+							  }
+
+							  holder.setNum(value);
+
+							  valueText.setText(
+								  html("═▶︎ <font color='" + NumberTxtColor + "'>"
+									   + value + "</font>")
+							  );
+
+							  Preferences.changeFeatureInt(name, featNum, value);
+						  }
+					  });
+			  }
+		  });
+
+	  row.addView(column);
+	  column.addView(title);
+	  column.addView(valueText);
+	  row.addView(eye);
+	  row.addView(enter);
+	  parent.addView(row);
   }
 
-  public void InputText(LinearLayout parent, int featNum, String name) {
-    EditTextString holder = new EditTextString();
+  public void InputText(LinearLayout parent, final int featNum, final String name) {
+    final EditTextString holder = new EditTextString();
 
     LinearLayout row = createInputRow();
     LinearLayout column = createInputTextColumn();
@@ -1689,7 +2017,7 @@ public class FloatingModMenuService extends Service {
     }
     holder.setString(saved);
 
-    TextView valueText = new TextView(this);
+    final TextView valueText = new TextView(this);
     valueText.setText(html("═▶︎<font color='" + NumberTxtColor + "'>" + saved + "</font>"));
     valueText.setTextColor(TEXT_COLOR_2);
     valueText.setGravity(Gravity.LEFT);
@@ -1698,25 +2026,48 @@ public class FloatingModMenuService extends Service {
 
     TextView eye = createEyeToggle(valueText);
 
-    Button enter = createEnterButton();
-    enter.setOnClickListener(view -> showInputDialog(name, false, holder.getString(), text -> {
-      holder.setString(text);
-      valueText.setText(html("═▶︎<font color='" + NumberTxtColor + "'>" + text + "</font>"));
-      Preferences.changeFeatureString(name, featNum, text);
-    }));
+	  Button enter = createEnterButton();
 
-    row.addView(column);
-    column.addView(title);
-    column.addView(valueText);
-    row.addView(eye);
-    row.addView(enter);
-    parent.addView(row);
-  }
+	  enter.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  showInputDialog(
+					  name,
+					  false,
+					  holder.getString(),
+					  new InputCallback() {
 
+						  @Override
+						  public void onConfirm(String text) {
+							  holder.setString(text);
+
+							  valueText.setText(
+								  html("═▶︎<font color='" + NumberTxtColor
+									   + "'>" + text + "</font>")
+							  );
+
+							  Preferences.changeFeatureString(
+								  name,
+								  featNum,
+								  text
+							  );
+						  }
+					  }
+				  );
+			  }
+		  });
+
+	  row.addView(column);
+	  column.addView(title);
+	  column.addView(valueText);
+	  row.addView(eye);
+	  row.addView(enter);
+	  parent.addView(row);
+	  }
   /** Общий диалог ввода числа или текста. */
   private void showInputDialog(String featName, boolean numeric, String initialText,
-      InputCallback onConfirm) {
-    AlertDialog dialog = createOverlayDialog();
+      final InputCallback onConfirm) {
+    final AlertDialog dialog = createOverlayDialog();
     Context ctx = getApplicationContext();
 
     LinearLayout content = new LinearLayout(ctx);
@@ -1742,120 +2093,217 @@ public class FloatingModMenuService extends Service {
     hint.setTextColor(TEXT_COLOR);
 
     LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    editParams.weight = 1;
-    EditText edit = new EditText(ctx);
-    edit.setLayoutParams(editParams);
-    edit.setMaxLines(1);
-    edit.setWidth(dp(300));
-    edit.setOnFocusChangeListener((v, hasFocus) -> {
-      if (hasFocus) {
-        toggleKeyboard(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
-      } else {
-        toggleKeyboard(InputMethodManager.SHOW_IMPLICIT, 0);
-      }
-    });
+    ViewGroup.LayoutParams.MATCH_PARENT,
+    ViewGroup.LayoutParams.WRAP_CONTENT
+);
 
-    if (numeric) {
-      edit.setHint("Write Value");
-      edit.setTextColor(TEXT_COLOR);
-      edit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-      edit.setKeyListener(DigitsKeyListener.getInstance("0123456789-"));
-      edit.setFilters(new InputFilter[] { new InputFilter.LengthFilter(10) });
-      edit.setOnTouchListener((v, event) -> {
-        switch (event.getAction()) {
-          case MotionEvent.ACTION_DOWN:
-            edit.setTransformationMethod(PasswordTransformationMethod.getInstance());
-            return true;
-          case MotionEvent.ACTION_UP:
-            edit.setTransformationMethod(HideReturnsTransformationMethod.getInstance());
-            return true;
-          default:
-            return false;
+editParams.weight = 1;
+
+final EditText edit = new EditText(ctx);
+edit.setLayoutParams(editParams);
+edit.setMaxLines(1);
+edit.setWidth(dp(300));
+
+edit.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+    @Override
+    public void onFocusChange(View v, boolean hasFocus) {
+        if (hasFocus) {
+            toggleKeyboard(
+ InputMethodManager.SHOW_FORCED,
+ InputMethodManager.HIDE_IMPLICIT_ONLY
+            );
+        } else {
+            toggleKeyboard(
+ InputMethodManager.SHOW_IMPLICIT,
+ 0
+            );
         }
-      });
-    } else {
-      edit.setHint("Write Text");
-      edit.setTextColor(TEXT_COLOR_2);
-      edit.setText(initialText);
     }
-    edit.requestFocus();
+});
 
-    LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    buttonParams.setMargins(20, 10, 20, 15);
-    Button setButton = new Button(ctx);
-    GradientDrawable bg = new GradientDrawable();
-    bg.setColor(BTN_COLOR);
-    bg.setStroke(2, Color.WHITE);
-    bg.setCornerRadii(new float[] { 30, 30, 0, 0, 30, 30, 0, 0 });
-    setButton.setBackground(bg);
-    setButton.setLayoutParams(buttonParams);
-    setButton.setTextColor(TEXT_COLOR_2);
-    setButton.setPadding(15, 10, 15, 10);
-    setButton.setText("SET VALUE");
-    setButton.setOnClickListener(view -> {
-      onConfirm.onConfirm(edit.getText().toString());
-      dialog.dismiss();
-      edit.setFocusable(false);
+if (numeric) {
+    edit.setHint("Write Value");
+    edit.setTextColor(TEXT_COLOR);
+    edit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+
+    edit.setKeyListener(
+        DigitsKeyListener.getInstance("0123456789-")
+    );
+
+    edit.setFilters(
+        new InputFilter[] {
+            new InputFilter.LengthFilter(10)
+        }
+    );
+
+    edit.setOnTouchListener(new View.OnTouchListener() {
+        @Override
+        public boolean onTouch(View v, MotionEvent event) {
+            switch (event.getAction()) {
+ case MotionEvent.ACTION_DOWN:
+	 edit.setTransformationMethod(
+		 PasswordTransformationMethod.getInstance()
+	 );
+	 return true;
+
+ case MotionEvent.ACTION_UP:
+	 edit.setTransformationMethod(
+		 HideReturnsTransformationMethod.getInstance()
+	 );
+	 return true;
+
+ default:
+	 return false;
+            }
+        }
     });
 
-    content.addView(title);
-    content.addView(hint);
-    content.addView(edit);
-    content.addView(setButton);
-    dialog.setView(content);
-    dialog.show();
+} else {
+    edit.setHint("Write Text");
+    edit.setTextColor(TEXT_COLOR_2);
+    edit.setText(initialText);
+}
+
+edit.requestFocus();
+
+LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT,
+    ViewGroup.LayoutParams.WRAP_CONTENT
+);
+
+buttonParams.setMargins(20, 10, 20, 15);
+
+Button setButton = new Button(ctx);
+
+GradientDrawable bg = new GradientDrawable();
+bg.setColor(BTN_COLOR);
+bg.setStroke(2, Color.WHITE);
+bg.setCornerRadii(
+    new float[] {
+        30, 30,
+        0, 0,
+        30, 30,
+        0, 0
+    }
+);
+
+setButton.setBackground(bg);
+setButton.setLayoutParams(buttonParams);
+setButton.setTextColor(TEXT_COLOR_2);
+setButton.setPadding(15, 10, 15, 10);
+setButton.setText("SET VALUE");
+
+setButton.setOnClickListener(new View.OnClickListener() {
+    @Override
+    public void onClick(View view) {
+        onConfirm.onConfirm(edit.getText().toString());
+
+        dialog.dismiss();
+
+        edit.setFocusable(false);
+    }
+});
+
+content.addView(title);
+content.addView(hint);
+content.addView(edit);
+content.addView(setButton);
+
+dialog.setView(content);
+dialog.show();
   }
 
   // ───────────── CheckBox / Radio ─────────────
 
-  public View CheckBox(int featNum, String name, boolean defaultValue) {
-    CheckBox checkBox = new CheckBox(this);
-    checkBox.setText(name);
-    checkBox.setTextColor(TEXT_COLOR_2);
-    if (Build.VERSION.SDK_INT >= 21) {
-      checkBox.setButtonTintList(ColorStateList.valueOf(CheckBoxColor));
-    }
-    checkBox.setChecked(Preferences.loadPrefBool(name, featNum, defaultValue));
-    checkBox.setOnCheckedChangeListener(
-        (button, isChecked) -> Preferences.changeFeatureBool(name, featNum, isChecked));
-    return checkBox;
-  }
+	public View CheckBox(final int featNum, final String name, boolean defaultValue) {
+		CheckBox checkBox = new CheckBox(this);
 
-  public View RadioButton(int featNum, String name, String optionsCsv) {
+		checkBox.setText(name);
+		checkBox.setTextColor(TEXT_COLOR_2);
+
+		if (Build.VERSION.SDK_INT >= 21) {
+			checkBox.setButtonTintList(
+				ColorStateList.valueOf(CheckBoxColor)
+			);
+		}
+
+		checkBox.setChecked(
+			Preferences.loadPrefBool(name, featNum, defaultValue)
+		);
+
+		checkBox.setOnCheckedChangeListener(
+			new CompoundButton.OnCheckedChangeListener() {
+				@Override
+				public void onCheckedChanged(
+					CompoundButton button,
+					boolean isChecked
+				) {
+					Preferences.changeFeatureBool(
+						name,
+						featNum,
+						isChecked
+					);
+				}
+			}
+		);
+
+		return checkBox;
+	}
+  public View RadioButton(final int featNum, final String name, String optionsCsv) {
     List<String> options = Arrays.asList(optionsCsv.split(","));
 
-    RainbowActivity label = new RainbowActivity(this);
+    final RainbowActivity label = new RainbowActivity(this);
     label.setText(name + ":");
     label.setTextColor(TEXT_COLOR_2);
 
-    RadioGroup group = new RadioGroup(this);
+    final RadioGroup group = new RadioGroup(this);
     group.setPadding(10, 5, 10, 5);
     group.setOrientation(RadioGroup.VERTICAL);
     group.addView(label);
 
-    for (String option : options) {
-      RadioButton radio = new RadioButton(this);
-      radio.setText(option);
-      radio.setTextColor(-3355444);
-      if (Build.VERSION.SDK_INT >= 21) {
-        radio.setButtonTintList(ColorStateList.valueOf(RadioColor));
-      }
-      radio.setOnClickListener(view -> {
-        label.setText(html(name + ": <font color='" + NumberTxtColor + "'>" + option));
-        Preferences.changeFeatureInt(name, featNum, group.indexOfChild(radio));
-      });
-      group.addView(radio);
-    }
+	  for (final String option : options) {
+		  final RadioButton radio = new RadioButton(this);
 
-    int saved = Preferences.loadPrefInt(name, featNum);
-    if (saved > 0) {
-      label
-          .setText(html(name + ": <font color='" + NumberTxtColor + "'>" + options.get(saved - 1)));
-      ((RadioButton) group.getChildAt(saved)).setChecked(true);
-    }
-    return group;
+		  radio.setText(option);
+		  radio.setTextColor(-3355444);
+
+		  if (Build.VERSION.SDK_INT >= 21) {
+			  radio.setButtonTintList(
+				  ColorStateList.valueOf(RadioColor)
+			  );
+		  }
+
+		  radio.setOnClickListener(new View.OnClickListener() {
+				  @Override
+				  public void onClick(View view) {
+					  label.setText(
+						  html(name + ": <font color='" + NumberTxtColor
+							   + "'>" + option)
+					  );
+
+					  Preferences.changeFeatureInt(
+						  name,
+						  featNum,
+						  group.indexOfChild(radio)
+					  );
+				  }
+			  });
+
+		  group.addView(radio);
+	  }
+
+	  int saved = Preferences.loadPrefInt(name, featNum);
+
+	  if (saved > 0 && saved < group.getChildCount()) {
+		  label.setText(
+			  html(name + ": <font color='" + NumberTxtColor
+				   + "'>" + options.get(saved - 1))
+		  );
+
+		  ((RadioButton) group.getChildAt(saved)).setChecked(true);
+	  }
+
+	  return group;
   }
 
   // ───────────── Ссылки с иконками ─────────────
@@ -1873,7 +2321,7 @@ public class FloatingModMenuService extends Service {
     addIconLink(parent, text, IconTele(), "https://t.me/DONIMODZ");
   }
 
-  private void addIconLink(LinearLayout parent, String text, String iconBase64, String url) {
+  private void addIconLink(LinearLayout parent, String text, String iconBase64, final String url) {
     LinearLayout row = new LinearLayout(this);
     LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -1899,23 +2347,33 @@ public class FloatingModMenuService extends Service {
     label.setSingleLine(true);
     label.setPadding(5, 0, 0, 0);
 
-    Button button = new Button(this);
-    button.setTextColor(TEXT_COLOR_2);
-    button.setBackground(drawableFromBase64(iconBase64));
-    RelativeLayout.LayoutParams buttonParams = new RelativeLayout.LayoutParams(75, 75);
-    buttonParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
-    button.setLayoutParams(buttonParams);
-    button.setOnClickListener(view -> openUrl(url));
+	  Button button = new Button(this);
 
-    row.addView(column);
-    column.addView(label);
-    row.addView(button);
-    parent.addView(row);
+	  button.setTextColor(TEXT_COLOR_2);
+	  button.setBackground(drawableFromBase64(iconBase64));
+
+	  RelativeLayout.LayoutParams buttonParams =
+		  new RelativeLayout.LayoutParams(75, 75);
+
+	  buttonParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+	  button.setLayoutParams(buttonParams);
+
+	  button.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  openUrl(url);
+			  }
+		  });
+
+	  row.addView(column);
+	  column.addView(label);
+	  row.addView(button);
+	  parent.addView(row);
   }
 
   // ───────────── Collapse / текстовые блоки ─────────────
 
-  public void Collapse(LinearLayout parent, String text) {
+  public void Collapse(LinearLayout parent, final String text) {
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
     lp.setMargins(0, 5, 0, 0);
@@ -1925,7 +2383,7 @@ public class FloatingModMenuService extends Service {
     container.setVerticalGravity(Gravity.CENTER_VERTICAL);
     container.setOrientation(LinearLayout.VERTICAL);
 
-    LinearLayout body = new LinearLayout(this);
+    final LinearLayout body = new LinearLayout(this);
     body.setVerticalGravity(Gravity.CENTER_VERTICAL);
     body.setPadding(0, 5, 0, 5);
     body.setOrientation(LinearLayout.VERTICAL);
@@ -1933,12 +2391,12 @@ public class FloatingModMenuService extends Service {
     body.setVisibility(View.GONE);
     mCollapse = body;
 
-    GradientDrawable border = new GradientDrawable();
+    final GradientDrawable border = new GradientDrawable();
     border.setStroke(3, Color.parseColor("BLUE"));
     border.setCornerRadii(new float[] { 50, 50, 30, 30, 30, 30, 30, 30 });
     container.setBackground(border);
 
-    TextView header = new TextView(this);
+    final TextView header = new TextView(this);
     header.setBackgroundColor(0);
     header.setText("▽ " + text + " ▽");
     header.setGravity(Gravity.CENTER);
@@ -1946,22 +2404,31 @@ public class FloatingModMenuService extends Service {
     header.setTypeface(null, Typeface.BOLD);
     header.setPadding(0, 20, 0, 20);
 
-    boolean[] expanded = { false };
-    header.setOnClickListener(view -> {
-      expanded[0] = !expanded[0];
-      if (expanded[0]) {
-        body.setVisibility(View.VISIBLE);
-        header.setText("△ " + text + " △");
-      } else {
-        body.setVisibility(View.GONE);
-        header.setText("▽ " + text + " ▽");
-      }
-      border.setStroke(3, Color.parseColor("#3c5afe"));
-    });
+	  final boolean[] expanded = { false };
 
-    container.addView(header);
-    container.addView(body);
-    parent.addView(container);
+	  header.setOnClickListener(new View.OnClickListener() {
+			  @Override
+			  public void onClick(View view) {
+				  expanded[0] = !expanded[0];
+
+				  if (expanded[0]) {
+					  body.setVisibility(View.VISIBLE);
+					  header.setText("△ " + text + " △");
+				  } else {
+					  body.setVisibility(View.GONE);
+					  header.setText("▽ " + text + " ▽");
+				  }
+
+				  border.setStroke(
+					  3,
+					  Color.parseColor("#3c5afe")
+				  );
+			  }
+		  });
+
+	  container.addView(header);
+	  container.addView(body);
+	  parent.addView(container);
   }
 
   public View Category(String text) {
@@ -1972,7 +2439,7 @@ public class FloatingModMenuService extends Service {
     bg.setStroke(3, Color.WHITE);
     view.setBackground(bg);
     view.setText(html(text));
-    view.setTypeface(Typeface.createFromAsset(getAssets(), "NoName1.ttf"));
+    view.setTypeface(safeFont("NoName1.ttf"));
     view.setGravity(Gravity.CENTER);
     view.setTextColor(TEXT_COLOR_2);
     view.setPadding(0, 5, 0, 5);

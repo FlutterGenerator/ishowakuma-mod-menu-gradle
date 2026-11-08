@@ -66,17 +66,30 @@ static bool doHook(void *target, void *stub, void **orig) {
 }
 
 // ---------------------------------------------------------------- memory patches
+static std::string gInfo; // "abs=0x... was=XXXXXXXX" of the last patch (shown in toast + logcat)
+
+static void rememberInfo(MemoryPatch &mp) {
+    char b[96];
+    snprintf(b, sizeof(b), "abs=0x%llx was=", (unsigned long long) mp.get_TargetAddress());
+    gInfo = std::string(b) + mp.get_CurrBytes();
+    LOGI("%s", gInfo.c_str());
+}
+
 static bool applyHex(MemoryPatch &mp, uintptr_t off, const std::string &hex) {
     if (mp.isValid()) mp.Restore();
     mp = MemoryPatch::createWithHex(gLib.c_str(), off, hex);
-    return mp.isValid() && mp.Modify();
+    if (!mp.isValid()) return false;
+    rememberInfo(mp);
+    return mp.Modify();
 }
 
 static bool applyBytes(MemoryPatch &mp, uintptr_t off, const std::vector<uint8_t> &bytes) {
     if (bytes.empty()) return false;
     if (mp.isValid()) mp.Restore();
     mp = MemoryPatch(gLib.c_str(), off, bytes.data(), bytes.size());
-    return mp.isValid() && mp.Modify();
+    if (!mp.isValid()) return false;
+    rememberInfo(mp);
+    return mp.Modify();
 }
 
 static bool restorePatch(MemoryPatch &mp) {
@@ -134,6 +147,9 @@ struct HookState {
     uintptr_t off = 0;
 };
 
+static JNIEnv *g_env_for_toast = nullptr;
+static jobject g_ctx_for_toast = nullptr;
+
 static bool installHook(HookState &st, uintptr_t off, void *stub, void **orig, std::string &err) {
     if (st.installed) {
         if (st.off != off) {
@@ -150,6 +166,8 @@ static bool installHook(HookState &st, uintptr_t off, void *stub, void **orig, s
     if (!doHook((void *) addr, stub, orig)) { err = "Hook failed"; return false; }
     st.installed = true;
     st.off = off;
+    LOGI("Hook installed at abs=0x%llx", (unsigned long long) addr);
+    toast(g_env_for_toast, g_ctx_for_toast, "Hook installed");
     return true;
 }
 
@@ -288,9 +306,10 @@ static void refreshDisable(JNIEnv *env, jobject ctx) {
         if (!parseHex(sDvOff, off)) { toast(env, ctx, "Disable Void: enter a valid offset"); return; }
         std::vector<uint8_t> ret;
         if (!buildRet(ret)) { toast(env, ctx, "Unsupported CPU architecture"); return; }
-        if (!applyBytes(gDisable, off, ret)) toast(env, ctx, "Disable Void failed (library/offset?)");
+        if (!applyBytes(gDisable, off, ret)) toast(env, ctx, "Disable Void failed (library not loaded / bad offset)");
+        else toast(env, ctx, ("Disable Void ON " + gInfo).c_str());
     } else {
-        restorePatch(gDisable);
+        if (restorePatch(gDisable)) toast(env, ctx, "Disable Void: restored original code");
     }
 }
 
@@ -324,7 +343,7 @@ static const float EP_FLT_V[] = {0, 0.0f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 50.0f, 
 
 static void refreshEasy(JNIEnv *env, jobject ctx) {
     bool want = onEp && epType >= 1;
-    if (!want) { restorePatch(gEasy); return; }
+    if (!want) { if (restorePatch(gEasy)) toast(env, ctx, "Easy Patch: restored original code"); return; }
     uintptr_t off;
     if (!parseHex(sEpOff, off)) { toast(env, ctx, "Easy Patch: enter a valid offset"); return; }
     uint32_t bits = 0;
@@ -343,11 +362,64 @@ static void refreshEasy(JNIEnv *env, jobject ctx) {
     }
     std::vector<uint8_t> code;
     if (!buildReturn(kind, bits, code)) { toast(env, ctx, "Unsupported CPU architecture"); return; }
-    if (!applyBytes(gEasy, off, code)) toast(env, ctx, "Easy Patch failed (library/offset?)");
+    if (!applyBytes(gEasy, off, code)) toast(env, ctx, "Easy Patch failed (library not loaded / bad offset)");
+    else toast(env, ctx, ("Easy Patch ON " + gInfo).c_str());
+}
+
+// ---------------------------------------------------------------- toast for EVERY action
+#include <time.h>
+static const char *featName(int n) {
+    switch (n) {
+        case F_LIB_NAME: return "Lib: name";      case F_LIB_SET: return "Lib: Set Lib";
+        case F_LIB_SHOW: return "Lib: Show Offsets";
+        case F_P_OFF: return "Patch: offset";     case F_P_HEX: return "Patch: hex";
+        case F_P_TOGGLE: return "Patch: toggle";  case F_P_APPLY: return "Patch: PATCH";
+        case F_P_RESTORE: return "Patch: RESTORE";
+        case F_HO_MODE: return "HookOffset: mode"; case F_HO_OFF: return "HookOffset: offset";
+        case F_HO_VAL: return "HookOffset: value"; case F_HO_ON: return "HookOffset: enable";
+        case F_FD_MODE: return "Field: type";     case F_FD_OFF: return "Field: method offset";
+        case F_FD_VAL: return "Field: field offset"; case F_FD_UPD: return "Field: update value";
+        case F_FD_ON: return "Field: enable";
+        case F_HV_MODE: return "HookVoid: mode";  case F_HV_OFF: return "HookVoid: offset";
+        case F_HV_VAL: return "HookVoid: value";  case F_HV_UPD: return "HookVoid: update";
+        case F_HV_ON: return "HookVoid: enable";
+        case F_DV_MODE: return "DisableVoid: mode"; case F_DV_OFF: return "DisableVoid: offset";
+        case F_DV_ON: return "DisableVoid: enable";
+        case F_CV_MODE: return "CallVoid: mode";  case F_CV_OFF: return "CallVoid: offset";
+        case F_CV_ON: return "CallVoid: enable";
+        case F_EP_TYPE: return "Easy: type";      case F_EP_OFF: return "Easy: offset";
+        case F_EP_INT: return "Easy: int value";  case F_EP_FLT: return "Easy: float value";
+        case F_EP_BOOL: return "Easy: bool value"; case F_EP_ON: return "Easy: enable";
+        default: return "Feature";
+    }
+}
+
+static bool isToggleOrButton(int n) {
+    return n == F_P_TOGGLE || n == F_HO_ON || n == F_FD_ON || n == F_HV_ON || n == F_DV_ON ||
+           n == F_CV_ON || n == F_EP_ON;
+}
+static bool isTextInput(int n) {
+    return n == F_LIB_NAME || n == F_P_OFF || n == F_P_HEX || n == F_HO_OFF || n == F_HO_VAL ||
+           n == F_FD_OFF || n == F_FD_VAL || n == F_FD_UPD || n == F_HV_OFF || n == F_HV_VAL ||
+           n == F_HV_UPD || n == F_DV_OFF || n == F_CV_OFF || n == F_EP_OFF;
 }
 
 // ---------------------------------------------------------------- dispatcher
 static void handle(JNIEnv *env, jobject ctx, int n, int val, bool b, const std::string &s) {
+    g_env_for_toast = env;
+    g_ctx_for_toast = ctx;
+    // The menu fires every feature once while it is being built: stay quiet for the first 3 s
+    static time_t quietUntil = 0;
+    time_t now = time(nullptr);
+    if (quietUntil == 0) quietUntil = now + 3;
+    if (now >= quietUntil && n >= 10) {
+        std::string t = std::string("[") + featName(n) + "] ";
+        if (isToggleOrButton(n)) t += b ? "ON" : "OFF";
+        else if (isTextInput(n)) t += "= " + (s.empty() ? std::string("(empty)") : s);
+        else if (n == F_LIB_SET || n == F_LIB_SHOW || n == F_P_APPLY || n == F_P_RESTORE) t += "pressed";
+        else t += "= " + std::to_string(val);
+        toast(env, ctx, t.c_str());
+    }
     switch (n) {
         // ---- library
         case F_LIB_NAME: sLibIn = trim(s); break;
@@ -371,13 +443,14 @@ static void handle(JNIEnv *env, jobject ctx, int n, int val, bool b, const std::
         case F_P_APPLY:
         case F_P_RESTORE: {
             bool apply = (n == F_P_APPLY) || (n == F_P_TOGGLE && b);
-            if (!apply) { restorePatch(gPatch); break; }
+            if (!apply) { if (restorePatch(gPatch)) toast(env, ctx, "Patch: restored original code"); break; }
             uintptr_t off;
             if (!parseHex(sPOff, off) || trim(sPHex).empty()) {
                 toast(env, ctx, "Patch: enter offset and hex");
                 break;
             }
-            if (!applyHex(gPatch, off, trim(sPHex))) toast(env, ctx, "Patch failed (library/offset/hex?)");
+            if (!applyHex(gPatch, off, trim(sPHex))) toast(env, ctx, "Patch failed (library not loaded / bad offset / bad hex)");
+            else toast(env, ctx, ("Patched OK " + gInfo).c_str());
             break;
         }
         // ---- hook offset

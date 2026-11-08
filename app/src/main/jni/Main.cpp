@@ -25,51 +25,11 @@
 struct My_Patches {
     // let's assume we have patches for these functions for whatever game
     // like show in miniMap boolean function
-    MemoryPatch GodMode, GodMode2, SliderExample;
+    MemoryPatch placeholder; // add your patches here
     // etc...
 } hexPatches;
 
-bool feature1, feature2, featureHookToggle, Health;
-int sliderValue = 1, level = 0;
-void *instanceBtn;
-
 // Hooking examples. Assuming you know how to write hook
-void (*AddMoneyExample)(void *instance, int amount) = NULL;
-
-bool (*old_get_BoolExample)(void *instance);
-bool get_BoolExample(void *instance) {
-    if (instance != NULL && featureHookToggle) {
-        return true;
-    }
-    return old_get_BoolExample(instance);
-}
-
-float (*old_get_FloatExample)(void *instance);
-float get_FloatExample(void *instance) {
-    if (instance != NULL && sliderValue > 1) {
-        return (float) sliderValue;
-    }
-    return old_get_FloatExample(instance);
-}
-
-int (*old_Level)(void *instance);
-int Level(void *instance) {
-    if (instance != NULL && level) {
-        return (int) level;
-    }
-    return old_Level(instance);
-}
-
-void (*old_FunctionExample)(void *instance);
-void FunctionExample(void *instance) {
-    instanceBtn = instance;
-    if (instance != NULL) {
-        if (Health) {
-            *(int *) ((uint64_t) instance + 0x48) = 999;
-        }
-    }
-    return old_FunctionExample(instance);
-}
 
 // we will run our hacks in a new thread so our while loop doesn't block process main thread
 void *hack_thread(void *) {
